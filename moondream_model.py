@@ -1152,6 +1152,36 @@ class TextModel(nn.Module):
 
         return re.sub("<$", "", re.sub("END$", "", answer)).strip()
 
+    def answer_text_question(self, question, **kwargs):
+        """
+        专门用于处理纯文本问答的方法。
+        
+        参数:
+        - question: 提出的问题，纯文本格式。
+        - max_new_tokens: 生成答案时最大的新token数量。
+        - **kwargs: 其他传递给生成函数的参数。
+        
+        返回:
+        - 答案文本。
+        """
+        # 构建纯文本的prompt
+        prompt = f"\n\nQuestion: {question}\n\nAnswer:"
+        #创造一个空的image_embeds
+        # image_embeds = torch.zeros(1, 1, 1, device=self.model.device)
+        # 实际上使用None作为image_embeds参数，会导致模型忽略图像输入
+        image_embeds = None
+        # 调用generate方法生成答案
+        answer = self.generate(
+            image_embeds=image_embeds,
+            prompt=prompt,
+            eos_text="<END>",
+            max_new_tokens=128,
+            **kwargs,
+        )[0]
+
+        # 清理答案文本并返回
+        return re.sub("<$", "", re.sub("END$", "", answer)).strip()
+
 
 ##### GRADIO INTERFACE #####
 
@@ -1228,4 +1258,14 @@ class MoondreamModel():
             self.text_model = self.text_model.to("cpu", dtype=torch.float32)
             print(f"Memory usage: {torch.cuda.memory_allocated() / 1024 ** 3:.2f} GB")
         return output
-   
+
+    def answer_text_question(self, question):
+        if self.low_memory and self.device == "cuda":
+            self.text_model = self.text_model.to("cuda", dtype=torch.float16)
+        output = self.text_model.answer_text_question(question)
+        if self.low_memory and self.device == "cuda":
+            torch.cuda.empty_cache()
+            print(f"Memory usage: {torch.cuda.memory_allocated() / 1024 ** 3:.2f} GB")
+            self.text_model = self.text_model.to("cpu", dtype=torch.float32)
+            print(f"Memory usage: {torch.cuda.memory_allocated() / 1024 ** 3:.2f} GB")
+        return output
